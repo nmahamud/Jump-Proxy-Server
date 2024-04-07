@@ -1,9 +1,11 @@
 // socket-server project main.go
 package main
+
 import (
-        "fmt"
-        "net"
-        "os"
+	"fmt"
+	"net"
+	"os"
+        "io"
 )
 const (
         SERVER_HOST = "localhost"
@@ -31,12 +33,20 @@ func main() {
         }
 }
 func processClient(connection net.Conn) {
+        for {
         buffer := make([]byte, 1024)
         mLen, err := connection.Read(buffer)
         if err != nil {
+                if err == io.EOF {
+                        break
+                }
                 fmt.Println("Error reading:", err.Error())
         }
-        fmt.Println("Received: ", string(buffer[:mLen]))
+        if (string(buffer[:mLen]) == "exit\n") {
+                fmt.Println("Exit!!!!")
+        }
+        fmt.Print("Received: ", string(buffer[:mLen]))
         _, err = connection.Write([]byte("Thanks! Got your message:" + string(buffer[:mLen])))
+}
         connection.Close()
 }
