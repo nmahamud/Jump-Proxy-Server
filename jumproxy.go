@@ -25,27 +25,65 @@ const (
 )
 
 var (
-        
+    KEY_LOCATION = ""
+	KEY_PHRASE = ""
+	REVERSE_PORT = ""
+	HOST_NAME = ""
+	HOST_PORT = ""
 )
 
 func main() {
+	// Parse the arguments
 	args := os.Args
 	for index, element := range args {
-		fmt.Println(index, ": ", element)
+		if (index > 0) {
+			if (element == "-k") {
+				KEY_LOCATION = args[index + 1] // set the keylocation
+			}	else if element == "-l" {
+				REVERSE_PORT = args[index + 1] // set the neww port to listen to
+			}	else if args[index - 1] != "-k" && args[index - 1] != "-l" {
+				if HOST_NAME == "" {
+					HOST_NAME = args[index]
+				} else {
+					HOST_PORT = args[index]
+				}
+			}
+		}
 	}
 
+	// Get the keyphrase
+	phrase, err := os.ReadFile(KEY_LOCATION)
+	if err != nil {
+		panic(err)
+	}
+	KEY_PHRASE = string(phrase)
+
+
         // Start of server test, will change later
+	if REVERSE_PORT != "" {
+		serverMain()
+	} else {
+		fmt.Println("Add in client soon bruh")
+	}
+}
+
+// func clientMain() {
+
+// }
+
+func serverMain() {
 	fmt.Println("Server Running...")
-	server, err := net.Listen(SERVER_TYPE, SERVER_HOST+":"+SERVER_PORT)
+	server, err := net.Listen(SERVER_TYPE, SERVER_HOST+":"+REVERSE_PORT) // check for traffic in the port
 	if err != nil {
 		fmt.Println("Error listening:", err.Error())
 		os.Exit(1)
 	}
 	defer server.Close()
-	fmt.Println("Listening on " + SERVER_HOST + ":" + SERVER_PORT)
+	fmt.Println("Listening on " + SERVER_HOST + ":" + REVERSE_PORT)
 	fmt.Println("Waiting for client...")
 	for {
 		connection, err := server.Accept()
+
 		if err != nil {
 			fmt.Println("Error accepting: ", err.Error())
 			os.Exit(1)
@@ -55,26 +93,60 @@ func main() {
 	}
 }
 func processClient(connection net.Conn) {
-	for {
+	jumpServer, jErr := net.Dial(SERVER_TYPE, HOST_NAME+":"+HOST_PORT) // connect to the port you want to send traffic to
+	if jErr != nil {
+		panic(jErr)
+	}
+	
+	go func() { 
 		buffer := make([]byte, 1024)
 		mLen, err := connection.Read(buffer)
 		if err != nil {
-			if err == io.EOF {
-				break
-			}
 			fmt.Println("Error reading:", err.Error())
 		}
-		if string(buffer[:mLen]) == "exit\n" {
-			fmt.Println("Exit!!!!")
+		decryptedText := decryptIt(buffer[:mLen], KEY_PHRASE)
+		io.WriteString(jumpServer, string(decryptedText)) }()
+
+	go func() { 
+		buffer := make([]byte, 1024)
+		mLen, err := jumpServer.Read(buffer)
+		if err != nil {
+			fmt.Println("Error reading:", err.Error())
 		}
-		fmt.Print("Before Received: ", string(buffer[:mLen]))
-		encryptedText := encryptIt(buffer[:mLen], TEST_PHRASE)
-		fmt.Println("Encrypted Received: ", string(encryptedText))
-		decryptedText := decryptIt(encryptedText, TEST_PHRASE)
-		fmt.Println("Decrypted Received: ", string(decryptedText))
-		_, err = connection.Write([]byte("Thanks! Got your message:" + string(buffer[:mLen])))
-	}
-	connection.Close()
+		encryptedText := encryptIt(buffer[:mLen], KEY_PHRASE)
+		io.WriteString(connection, string(encryptedText)) }()
+	// for {
+	// 	buffer := make([]byte, 1024)
+	// 	mLen, err := connection.Read(buffer)
+	// 	if err != nil {
+	// 		if err == io.EOF {
+	// 			break
+	// 		}
+	// 		fmt.Println("Error reading:", err.Error())
+	// 	}
+	// 	if string(buffer[:mLen]) == "exit\n" {
+	// 		fmt.Println("Exit!!!!")
+	// 	}
+	// 	// fmt.Print("Before Received: ", string(buffer[:mLen]))
+		
+	// 	// fmt.Println("Encrypted Received: ", string(encryptedText))
+	// 	// decryptedText := decryptIt(buffer[:mLen], KEY_PHRASE)
+	// 	// fmt.Println("Decrypted Received: ", string(decryptedText))
+	// 	jBuffer := make([]byte, 1024)
+	// 	_, err = jConnection.Write(buffer[:mLen])
+	// 	jmLen, jErr := jConnection.Read(jBuffer)
+	// 	// _, err = jConnection.Write(decryptedText)
+	// 	if jErr != nil {
+	// 		if jErr == io.EOF {
+	// 			break
+	// 		}
+	// 		fmt.Println("Error reading:", jErr.Error())
+	// 	}
+	// 	encryptedText := encryptIt(buffer[:jmLen], KEY_PHRASE)
+
+	// 	_, err = connection.Write(encryptedText)
+	// }
+	// connection.Close()
 }
 
 func pbkdf2Key(input string) []byte {
