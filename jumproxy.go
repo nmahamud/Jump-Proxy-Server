@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	// "encoding/hex"
+	"bufio"
 	"golang.org/x/crypto/pbkdf2"
 	"log"
 )
@@ -25,23 +26,23 @@ const (
 )
 
 var (
-    KEY_LOCATION = ""
-	KEY_PHRASE = ""
+	KEY_LOCATION = ""
+	KEY_PHRASE   = ""
 	REVERSE_PORT = ""
-	HOST_NAME = ""
-	HOST_PORT = ""
+	HOST_NAME    = ""
+	HOST_PORT    = ""
 )
 
 func main() {
 	// Parse the arguments
 	args := os.Args
 	for index, element := range args {
-		if (index > 0) {
-			if (element == "-k") {
-				KEY_LOCATION = args[index + 1] // set the keylocation
-			}	else if element == "-l" {
-				REVERSE_PORT = args[index + 1] // set the neww port to listen to
-			}	else if args[index - 1] != "-k" && args[index - 1] != "-l" {
+		if index > 0 {
+			if element == "-k" {
+				KEY_LOCATION = args[index+1] // set the keylocation
+			} else if element == "-l" {
+				REVERSE_PORT = args[index+1] // set the neww port to listen to
+			} else if args[index-1] != "-k" && args[index-1] != "-l" {
 				if HOST_NAME == "" {
 					HOST_NAME = args[index]
 				} else {
@@ -58,18 +59,54 @@ func main() {
 	}
 	KEY_PHRASE = string(phrase)
 
-
-        // Start of server test, will change later
+	// Start of server test, will change later
 	if REVERSE_PORT != "" {
 		serverMain()
 	} else {
-		fmt.Println("Add in client soon bruh")
+		clientMain()
+		// fmt.Println("Add in client soon bruh")
 	}
 }
 
-// func clientMain() {
+func clientMain() {
+	server, err := net.Dial(SERVER_TYPE, HOST_NAME+":"+HOST_PORT) // connect to the new server
+	if err != nil {
+		fmt.Println("Error listening:", err.Error())
+		os.Exit(1)
+	}
+	defer server.Close()
+	for {
 
-// }
+		if err != nil {
+			fmt.Println("Error accepting: ", err.Error())
+			os.Exit(1)
+		}
+		scanner := bufio.NewScanner(os.Stdin)
+
+		go func() {
+			for scanner.Scan() {
+				encryptedText := encryptIt(scanner.Bytes(), KEY_PHRASE)
+				io.WriteString(server, string(encryptedText))
+			}
+			// buffer := make([]byte, 1024)
+			// mLen, err := connection.Read(buffer)
+			if err := scanner.Err(); err != nil {
+				fmt.Println("Error reading:", err.Error())
+			}
+		}()
+
+		go func() {
+			buffer := make([]byte, 1024)
+			mLen, err := server.Read(buffer)
+			if err != nil {
+				fmt.Println("Error reading:", err.Error())
+			}
+			decryptedText := decryptIt(buffer[:mLen], KEY_PHRASE)
+			io.WriteString(server, string(decryptedText))
+		}()
+	}
+
+}
 
 func serverMain() {
 	fmt.Println("Server Running...")
@@ -97,24 +134,26 @@ func processClient(connection net.Conn) {
 	if jErr != nil {
 		panic(jErr)
 	}
-	
-	go func() { 
+
+	go func() {
 		buffer := make([]byte, 1024)
 		mLen, err := connection.Read(buffer)
 		if err != nil {
 			fmt.Println("Error reading:", err.Error())
 		}
 		decryptedText := decryptIt(buffer[:mLen], KEY_PHRASE)
-		io.WriteString(jumpServer, string(decryptedText)) }()
+		io.WriteString(jumpServer, string(decryptedText))
+	}()
 
-	go func() { 
+	go func() {
 		buffer := make([]byte, 1024)
 		mLen, err := jumpServer.Read(buffer)
 		if err != nil {
 			fmt.Println("Error reading:", err.Error())
 		}
 		encryptedText := encryptIt(buffer[:mLen], KEY_PHRASE)
-		io.WriteString(connection, string(encryptedText)) }()
+		io.WriteString(connection, string(encryptedText))
+	}()
 	// for {
 	// 	buffer := make([]byte, 1024)
 	// 	mLen, err := connection.Read(buffer)
@@ -128,7 +167,7 @@ func processClient(connection net.Conn) {
 	// 		fmt.Println("Exit!!!!")
 	// 	}
 	// 	// fmt.Print("Before Received: ", string(buffer[:mLen]))
-		
+
 	// 	// fmt.Println("Encrypted Received: ", string(encryptedText))
 	// 	// decryptedText := decryptIt(buffer[:mLen], KEY_PHRASE)
 	// 	// fmt.Println("Decrypted Received: ", string(decryptedText))
