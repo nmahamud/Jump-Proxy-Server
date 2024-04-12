@@ -10,10 +10,13 @@ import (
 	"io"
 	"net"
 	"os"
+
 	// "encoding/hex"
-	"bufio"
-	"golang.org/x/crypto/pbkdf2"
+	// "bufio"
 	"log"
+
+	// "github.com/go-delve/delve/pkg/dwarf/reader"
+	"golang.org/x/crypto/pbkdf2"
 )
 
 const (
@@ -75,37 +78,45 @@ func clientMain() {
 		os.Exit(1)
 	}
 	defer server.Close()
-	for {
+	// reader := bufio.NewScanner(os.Stdin)
+	go clientSendRec(server)
 
-		if err != nil {
-			fmt.Println("Error accepting: ", err.Error())
-			os.Exit(1)
-		}
-		scanner := bufio.NewScanner(os.Stdin)
+}
 
-		go func() {
-			for scanner.Scan() {
-				encryptedText := encryptIt(scanner.Bytes(), KEY_PHRASE)
-				io.WriteString(server, string(encryptedText))
-			}
-			// buffer := make([]byte, 1024)
-			// mLen, err := connection.Read(buffer)
-			if err := scanner.Err(); err != nil {
-				fmt.Println("Error reading:", err.Error())
-			}
-		}()
-
-		go func() {
-			buffer := make([]byte, 1024)
-			mLen, err := server.Read(buffer)
+func clientSendRec(server net.Conn) {
+	go func() {
+		for {
+			buffer := make([]byte, 4096)
+			// _, err := io.ReadFull(stdReader, buffer)
+			// stdScanner.Scan()
+			// for scanner.Scan() {
+			// text:= stdScanner.Bytes()
+			_, err := os.Stdin.Read(buffer)
 			if err != nil {
 				fmt.Println("Error reading:", err.Error())
 			}
-			decryptedText := decryptIt(buffer[:mLen], KEY_PHRASE)
-			io.WriteString(server, string(decryptedText))
-		}()
-	}
+			encryptedText := encryptIt(buffer, KEY_PHRASE)
+			io.WriteString(server, string(encryptedText))
+		}
+		// }
+		// buffer := make([]byte, 1024)
+		// mLen, err := connection.Read(buffer)
+		// if err != nil {
+		// 	fmt.Println("Error reading:", err.Error())
+		// }
+	}()
 
+	go func() {
+		for {
+			rBuffer := make([]byte, 4096)
+			mLen, err := server.Read(rBuffer)
+			if err != nil {
+				fmt.Println("Error reading:", err.Error())
+			}
+			decryptedText := decryptIt(rBuffer[:mLen], KEY_PHRASE)
+			io.WriteString(os.Stdin, string(decryptedText))
+		}
+	}()
 }
 
 func serverMain() {
@@ -134,58 +145,31 @@ func processClient(connection net.Conn) {
 	if jErr != nil {
 		panic(jErr)
 	}
-
 	go func() {
-		buffer := make([]byte, 1024)
-		mLen, err := connection.Read(buffer)
-		if err != nil {
-			fmt.Println("Error reading:", err.Error())
+		for {
+			buffer := make([]byte, 4096)
+			mLen, err := connection.Read(buffer)
+			if err != nil {
+				fmt.Println("Error reading:", err.Error())
+			}
+			decryptedText := decryptIt(buffer[:mLen], KEY_PHRASE)
+			io.WriteString(jumpServer, string(decryptedText))
 		}
-		decryptedText := decryptIt(buffer[:mLen], KEY_PHRASE)
-		io.WriteString(jumpServer, string(decryptedText))
 	}()
 
 	go func() {
-		buffer := make([]byte, 1024)
-		mLen, err := jumpServer.Read(buffer)
-		if err != nil {
-			fmt.Println("Error reading:", err.Error())
+		for {
+			buffer := make([]byte, 4096)
+			mLen, err := jumpServer.Read(buffer)
+			if err != nil {
+				fmt.Println("Error reading:", err.Error())
+			}
+
+			encryptedText := encryptIt(buffer[:mLen], KEY_PHRASE)
+			io.WriteString(connection, string(encryptedText))
 		}
-		encryptedText := encryptIt(buffer[:mLen], KEY_PHRASE)
-		io.WriteString(connection, string(encryptedText))
 	}()
-	// for {
-	// 	buffer := make([]byte, 1024)
-	// 	mLen, err := connection.Read(buffer)
-	// 	if err != nil {
-	// 		if err == io.EOF {
-	// 			break
-	// 		}
-	// 		fmt.Println("Error reading:", err.Error())
-	// 	}
-	// 	if string(buffer[:mLen]) == "exit\n" {
-	// 		fmt.Println("Exit!!!!")
-	// 	}
-	// 	// fmt.Print("Before Received: ", string(buffer[:mLen]))
 
-	// 	// fmt.Println("Encrypted Received: ", string(encryptedText))
-	// 	// decryptedText := decryptIt(buffer[:mLen], KEY_PHRASE)
-	// 	// fmt.Println("Decrypted Received: ", string(decryptedText))
-	// 	jBuffer := make([]byte, 1024)
-	// 	_, err = jConnection.Write(buffer[:mLen])
-	// 	jmLen, jErr := jConnection.Read(jBuffer)
-	// 	// _, err = jConnection.Write(decryptedText)
-	// 	if jErr != nil {
-	// 		if jErr == io.EOF {
-	// 			break
-	// 		}
-	// 		fmt.Println("Error reading:", jErr.Error())
-	// 	}
-	// 	encryptedText := encryptIt(buffer[:jmLen], KEY_PHRASE)
-
-	// 	_, err = connection.Write(encryptedText)
-	// }
-	// connection.Close()
 }
 
 func pbkdf2Key(input string) []byte {
@@ -210,7 +194,6 @@ func encryptIt(value []byte, keyPhrase string) []byte {
 	cipheredText := gcmInstance.Seal(nonce, nonce, value, nil)
 
 	return cipheredText
-
 }
 
 func decryptIt(ciphered []byte, keyPhrase string) []byte {
