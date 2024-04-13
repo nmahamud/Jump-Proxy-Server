@@ -5,7 +5,8 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"crypto/sha256"
+	"crypto/sha1"
+	// "crypto/sha256"
 	"fmt"
 	"io"
 	"net"
@@ -76,34 +77,34 @@ func clientMain() {
 		os.Exit(1)
 	}
 	defer server.Close()
-	go clientSendRec(server)
+	clientSendRec(server)
 
 }
 
 func clientSendRec(server net.Conn) {
 	go func() {
 		for {
-			buffer := make([]byte, 4096)
-			_, err := os.Stdin.Read(buffer)
+			buffer := make([]byte, 8196)
+			mLen, err := os.Stdin.Read(buffer)
 			if err != nil {
 				fmt.Println("Error reading:", err.Error())
-			} else {
-				fmt.Println("Write deez")
 			}
-			encryptedText := encryptIt(buffer, KEY_PHRASE)
+			encryptedText := encryptIt(buffer[:mLen], KEY_PHRASE)
 			io.WriteString(server, string(encryptedText))
+			fmt.Println("At line 94: ", len(encryptedText), "clint got from stdin: ", mLen)
 		}
 	}()
 
 	// go func() {
 	for {
-		rBuffer := make([]byte, 4096)
+		rBuffer := make([]byte, 8224)
 		mLen, err := server.Read(rBuffer)
 		if err != nil {
 			fmt.Println("Error reading:", err.Error())
 		}
 		decryptedText := decryptIt(rBuffer[:mLen], KEY_PHRASE)
 		io.WriteString(os.Stdin, string(decryptedText))
+		fmt.Println("At line 107: ", len(decryptedText), "clint got from server: ", mLen)
 	}
 	// }()
 }
@@ -131,37 +132,41 @@ func serverMain() {
 }
 func processClient(connection net.Conn) {
 	jumpServer, jErr := net.Dial(SERVER_TYPE, HOST_NAME+":"+HOST_PORT) // connect to the port you want to send traffic to
+
 	if jErr != nil {
 		panic(jErr)
 	}
 	go func() {
 		for {
-			buffer := make([]byte, 4096)
+			buffer := make([]byte, 8224)
 			mLen, err := connection.Read(buffer)
 			if err != nil {
-				// if err == io.EOF {
-				// 	continue
-				// }
-				fmt.Println("Error reading:", err.Error())
+				if err == io.EOF {
+					break
+				}
+				fmt.Println("Error reading at line 144:", err.Error())
 			}
-			// decryptedText := decryptIt(buffer[:mLen], KEY_PHRASE)
-			io.WriteString(jumpServer, string(buffer[:mLen]))
+			decryptedText := decryptIt(buffer[:mLen], KEY_PHRASE)
+			io.WriteString(jumpServer, string(decryptedText))
+			fmt.Println("At line 151: ", len(decryptedText), "server got from client: ", mLen)
 		}
 	}()
 
 	// go func() {
 	for {
-		buffer := make([]byte, 4096)
+		buffer := make([]byte, 8196)
 		mLen, err := jumpServer.Read(buffer)
 		if err != nil {
 			// if err == io.EOF {
 			// 	continue
 			// }
-			fmt.Println("Error reading:", err.Error())
+			fmt.Println("Error reading at line 163:", err.Error())
 		}
-
-		// encryptedText := encryptIt(buffer[:mLen], KEY_PHRASE)
-		io.WriteString(connection, string(buffer[:mLen]))
+		// if err != io.EOF {
+		fmt.Println(string(buffer[:mLen]))
+		encryptedText := encryptIt(buffer[:mLen], KEY_PHRASE)
+		io.WriteString(connection, string(encryptedText))
+		fmt.Println("At line 167: ", len(encryptedText), "server got from jump: ", mLen)
 	}
 	// }()
 
@@ -169,7 +174,7 @@ func processClient(connection net.Conn) {
 
 func pbkdf2Key(input string) []byte {
 	byteInput := []byte(input)
-	key := pbkdf2.Key(byteInput, []byte(SALT), 4096, 32, sha256.New)
+	key := pbkdf2.Key(byteInput, []byte(SALT), 4096, 32, sha1.New)
 	return key // by referring to it as a string
 }
 
