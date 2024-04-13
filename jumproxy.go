@@ -122,7 +122,7 @@ func clientSendRec(server net.Conn) {
 
 func serverMain() {
 	fmt.Println("Server Running...")
-	server, err := net.Listen(SERVER_TYPE, SERVER_HOST+":"+REVERSE_PORT) // check for traffic in the port
+	server, err := net.Listen(SERVER_TYPE, ":"+REVERSE_PORT) // check for traffic in the port
 	if err != nil {
 		fmt.Println("Error listening:", err.Error())
 		os.Exit(1)
