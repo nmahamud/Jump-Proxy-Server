@@ -6,16 +6,13 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha1"
-	// "crypto/sha256"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"strings"
-	// "strconv"
 	"log"
 
-	// "github.com/go-delve/delve/pkg/dwarf/reader"
 	"golang.org/x/crypto/pbkdf2"
 )
 
@@ -94,18 +91,17 @@ func clientSendRec(server net.Conn) {
 			if err != nil {
 				panic(err)
 			}
-			// io.WriteString(server, string(encryptedText))
-			// fmt.Println("At line 94: ", bytes, "clint got from stdin: ", mLen)
 		}
 	}()
 
-	// go func() {
 	for {
 		rBuffer := make([]byte, 8300)
 		mLen, err := server.Read(rBuffer)
-		// str := strings.Split(string(rBuffer), " ")[0]
-		// lenOfCipher,_ := strconv.Atoi(str)
 		if err != nil {
+			if err == io.EOF {
+				server.Close()   
+				return
+			}
 			fmt.Println("Error reading:", err.Error())
 		}
 		decryptedText := decryptIt(rBuffer[:mLen], KEY_PHRASE)
@@ -114,10 +110,7 @@ func clientSendRec(server net.Conn) {
 		if err != nil {
 			panic(err)
 		}
-		// io.WriteString(os.Stdin, string(decryptedText))
-		// fmt.Println("At line 107: ", bytes, "clint got from server: ", mLen)
 	}
-	// }()
 }
 
 func serverMain() {
@@ -147,17 +140,16 @@ func processClient(connection net.Conn) {
 	if jErr != nil {
 		panic(jErr)
 	}
+	notify := make(chan error)
 	go func() {
 		for {
 			buffer := make([]byte, 8300)
 			mLen, err := connection.Read(buffer)
-			// str := strings.Split(string(buffer), " ")[0]
-			// lenOfCipher,_ := strconv.Atoi(str)
-			// fmt.Println(str)
-			// fmt.Println(string(buffer))
-			// fmt.Println(string(buffer[len(str)+1:len(str)+lenOfCipher+1]))
 			if err != nil {
 				if err == io.EOF {
+					notify <- err
+					connection.Close()
+					jumpServer.Close()
 					break
 				}
 				fmt.Println("Error reading at line 144:", err.Error())
@@ -168,34 +160,25 @@ func processClient(connection net.Conn) {
 			if err != nil {
 				panic(err)
 			}
-			// io.WriteString(jumpServer, string(decryptedText))
-			// fmt.Println("At line 151: ", bytes, "server got from client: ", mLen)
 		}
 	}()
 
-	// go func() {
 	for {
 		buffer := make([]byte, 8196)
 		mLen, err := jumpServer.Read(buffer)
 		if err != nil {
-			// if err == io.EOF {
-			// 	continue
-			// }
+			if err == io.EOF {
+				return
+			}
 			fmt.Println("Error reading at line 163:", err.Error())
 		}
-		// if err != io.EOF {
-		// fmt.Println(string(buffer[:mLen]))
 		encryptedText := encryptIt(buffer[:mLen], KEY_PHRASE)
 		src := strings.NewReader(string(encryptedText))
 		_, err = io.Copy(connection, src)
 		if err != nil {
 			panic(err)
 		}
-		// io.WriteString(connection, string(encryptedText))
-		// fmt.Println("At line 167: ", bytes, "server got from jump: ", mLen)
 	}
-	// }()
-
 }
 
 func pbkdf2Key(input string) []byte {
